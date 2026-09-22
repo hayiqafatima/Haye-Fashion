@@ -1,18 +1,19 @@
-# HAYÉ — Frontend Starter
+# HAYÉ Couture Interface
 
-A React + Vite luxury fashion storefront built as the frontend starting point for a backend/Supabase learning project.
+A polished React/Vite storefront UI intended as the frontend for a Supabase backend learning project.
 
-## Run locally
+## Pages
+- Home
+- Collection with filters
+- Product detail
+- Shopping bag
+- Maison/About
 
+## Run
 ```bash
 npm install
 npm run dev
 ```
 
-Then open the local URL Vite prints in the terminal.
-
-## Current state
-
-The product data is intentionally hardcoded in `src/main.jsx`.
-
-Next, replace this mock data with a Supabase `products` table. After that, add authentication, cart persistence, orders, admin permissions, and Row Level Security.
+## Backend learning path
+The product catalog is currently mock data in `src/main.jsx`. The next step is to create a Supabase project and replace `PRODUCTS` with records from a `products` table. Then add Auth, persistent carts, orders, Storage and RLS.
