@@ -3,6 +3,9 @@ import {createRoot} from "react-dom/client";
 import {BrowserRouter,Routes,Route,Link,useNavigate,useParams} from "react-router-dom";
 import {Menu,X,Search,UserRound,ShoppingBag,ArrowRight,ArrowLeft,Minus,Plus,Trash2,Instagram} from "lucide-react";
 import "./styles.css";
+import { supabase } from "./lib/supabase";
+
+
 
 const PRODUCTS=[
 {id:1,name:"Mehrunisa",type:"Bridal",price:285000,desc:"A hand-embellished ivory bridal ensemble with antique gold detailing and a sculpted silhouette.",img:"https://images.unsplash.com/photo-1595777457583-95e059d581b8?auto=format&fit=crop&w=1000&q=88"},
@@ -34,6 +37,21 @@ function Layout({cart,setCart}){
   <Route path="/about" element={<About/>}/>
  </Routes><Footer/></>
 }
+
+async function testDatabase() {
+  const { data, error } = await supabase
+    .from("products")
+    .select("*");
+
+  if (error) {
+    console.error("Supabase error:", error);
+    return;
+  }
+
+  console.log("Products from Supabase:", data);
+}
+
+testDatabase();
 
 function Home(){
  return <main>
