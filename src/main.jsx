@@ -1,4 +1,4 @@
-import React,{useMemo,useState} from "react";
+import React, { useEffect, useState } from "react";
 import {createRoot} from "react-dom/client";
 import {BrowserRouter,Routes,Route,Link,useNavigate,useParams} from "react-router-dom";
 import {Menu,X,Search,UserRound,ShoppingBag,ArrowRight,ArrowLeft,Minus,Plus,Trash2,Instagram} from "lucide-react";
@@ -35,23 +35,9 @@ function Layout({cart,setCart}){
   <Route path="/product/:id" element={<Product cart={cart} setCart={setCart}/>}/>
   <Route path="/cart" element={<Cart cart={cart} setCart={setCart}/>}/>
   <Route path="/about" element={<About/>}/>
+  <Route path="/admin/products" element={<AdminProducts />} />
  </Routes><Footer/></>
 }
-
-async function testDatabase() {
-  const { data, error } = await supabase
-    .from("products")
-    .select("*");
-
-  if (error) {
-    console.error("Supabase error:", error);
-    return;
-  }
-
-  console.log("Products from Supabase:", data);
-}
-
-testDatabase();
 
 function Home(){
  return <main>
@@ -71,20 +57,377 @@ function Home(){
   <section className="newsletter"><span>PRIVATE ACCESS</span><h2>Enter the world of HAYÉ.</h2><p>New collections, atelier stories and private previews.</p><form onSubmit={e=>e.preventDefault()}><input type="email" placeholder="Your email address"/><button>Join <ArrowRight size={15}/></button></form></section>
  </main>
 }
-function Card({p}){return <article className="card"><Link to={"/product/"+p.id} className="pic"><img src={p.img}/><span>View piece</span></Link><div className="meta"><div><small>{p.type}</small><h3>{p.name}</h3></div><b>{money(p.price)}</b></div></article>}
-function Shop(){
- const q=new URLSearchParams(location.search); const initial=q.get("type")||"All"; const [filter,setFilter]=useState(initial);
- const shown=filter==="All"?PRODUCTS:PRODUCTS.filter(p=>p.type===filter);
- return <main className="shopPage"><div className="pageIntro"><span>THE COLLECTION</span><h1>Designed for<br/><i>celebration.</i></h1><p>Explore bridal, formal and luxury prêt pieces created with a modern point of view.</p></div>
- <div className="shopControls"><p>{shown.length} pieces</p><div>{["All","Bridal","Formal","Luxury Pret"].map(x=><button className={filter===x?"selected":""} onClick={()=>setFilter(x)} key={x}>{x}</button>)}</div></div>
- <div className="productGrid">{shown.map(p=><Card p={p} key={p.id}/>)}</div></main>
+function Card({ p }) {
+  return (
+    <article className="card">
+      <Link to={"/product/" + p.id} className="pic">
+        <img src={p.image_url} alt={p.name} />
+        <span>View piece</span>
+      </Link>
+
+      <div className="meta">
+        <div>
+          <small>{p.type}</small>
+          <h3>{p.name}</h3>
+        </div>
+
+        <b>{money(p.price)}</b>
+      </div>
+    </article>
+  );
 }
-function Product({cart,setCart}){
- const {id}=useParams(); const p=PRODUCTS.find(x=>x.id===+id)||PRODUCTS[0]; const [size,setSize]=useState("M");
- return <main className="productPage"><div className="productVisual"><img src={p.img}/></div><div className="productDetails"><Link to="/shop" className="back"><ArrowLeft size={15}/> Collection</Link><small>{p.type}</small><h1>{p.name}</h1><div className="price">{money(p.price)}</div><p>{p.desc}</p>
- <div className="option"><label>Size <a href="#">Size guide</a></label><div>{["XS","S","M","L","XL"].map(s=><button onClick={()=>setSize(s)} className={size===s?"chosen":""} key={s}>{s}</button>)}</div></div>
- <button className="add" onClick={()=>setCart([...cart,{...p,size,uid:Date.now()}])}>Add to bag <ShoppingBag size={17}/></button>
- <div className="accord"><p>Made to order · 6–8 weeks</p><p>Worldwide delivery available</p><p>Personal styling available by appointment</p></div></div></main>
+function AdminProducts() {
+  const [form, setForm] = useState({
+    name: "",
+    type: "Bridal",
+    price: "",
+    description: "",
+    image_url: "",
+  });
+
+  const [message, setMessage] = useState("");
+
+  function handleChange(e) {
+    setForm({
+      ...form,
+      [e.target.name]: e.target.value,
+    });
+  }
+
+const [products, setProducts] = useState([]);
+
+
+async function getProducts() {
+  const { data, error } = await supabase
+    .from("products")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching products:", error);
+    return;
+  }
+
+  setProducts(data);
+}
+
+
+useEffect(() => {
+  getProducts();
+}, []);
+
+
+async function deleteProduct(id) {
+  const { error } = await supabase
+    .from("products")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    console.error("Delete error:", error);
+    return;
+  }
+
+  console.log("Product deleted:", id);
+}
+
+
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+
+    const { data, error } = await supabase
+      .from("products")
+      .insert([
+        {
+          name: form.name,
+          type: form.type,
+          price: Number(form.price),
+          description: form.description,
+          image_url: form.image_url,
+        },
+      ])
+      .select();
+
+    if (error) {
+      console.error(error);
+      setMessage("Something went wrong.");
+      return;
+    }
+
+    console.log("Created product:", data);
+
+    setMessage("Product created successfully!");
+
+    setForm({
+      name: "",
+      type: "Bridal",
+      price: "",
+      description: "",
+      image_url: "",
+    });
+  }
+
+  return (
+    <main style={{ padding: "80px", maxWidth: "800px" }}>
+
+      <h1>Add Product</h1>
+
+      <form onSubmit={handleSubmit}>
+
+        <input
+          name="name"
+          placeholder="Product name"
+          value={form.name}
+          onChange={handleChange}
+        />
+
+        <select
+          name="type"
+          value={form.type}
+          onChange={handleChange}
+        >
+          <option>Bridal</option>
+          <option>Formal</option>
+          <option>Luxury Pret</option>
+        </select>
+
+        <input
+          name="price"
+          type="number"
+          placeholder="Price"
+          value={form.price}
+          onChange={handleChange}
+        />
+
+        <textarea
+          name="description"
+          placeholder="Description"
+          value={form.description}
+          onChange={handleChange}
+        />
+
+        <input
+          name="image_url"
+          placeholder="Image URL"
+          value={form.image_url}
+          onChange={handleChange}
+        />
+
+        <button type="submit">
+          Add Product
+        </button>
+
+      </form>
+
+      {message && <p>{message}</p>}
+
+    </main>
+  );
+}
+function Shop() {
+  const q = new URLSearchParams(location.search);
+  const initial = q.get("type") || "All";
+
+  const [filter, setFilter] = useState(initial);
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    async function getProducts() {
+      const { data, error } = await supabase
+        .from("products")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error(error);
+        setError(error.message);
+      } else {
+        setProducts(data);
+      }
+
+      setLoading(false);
+    }
+
+    getProducts();
+  }, []);
+
+  const shown =
+    filter === "All"
+      ? products
+      : products.filter((p) => p.type === filter);
+
+  if (loading) {
+    return <p style={{ padding: "100px" }}>Loading collection...</p>;
+  }
+
+  if (error) {
+    return <p style={{ padding: "100px" }}>Error: {error}</p>;
+  }
+
+  return (
+    <main className="shopPage">
+      <div className="pageIntro">
+        <span>THE COLLECTION</span>
+
+        <h1>
+          Designed for
+          <br />
+          <i>celebration.</i>
+        </h1>
+
+        <p>
+          Explore bridal, formal and luxury prêt pieces created with a
+          modern point of view.
+        </p>
+      </div>
+
+      <div className="shopControls">
+        <p>{shown.length} pieces</p>
+
+        <div>
+          {["All", "Bridal", "Formal", "Luxury Pret"].map((x) => (
+            <button
+              className={filter === x ? "selected" : ""}
+              onClick={() => setFilter(x)}
+              key={x}
+            >
+              {x}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="productGrid">
+        {shown.map((product) => (
+          <Card p={product} key={product.id} />
+        ))}
+      </div>
+    </main>
+  );
+}
+function Product({ cart, setCart }) {
+  const { id } = useParams();
+
+  const [product, setProduct] = useState(null);
+  const [size, setSize] = useState("M");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    async function getProduct() {
+      const { data, error } = await supabase
+        .from("products")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+      if (error) {
+        console.error("Product error:", error);
+        setError(error.message);
+      } else {
+        setProduct(data);
+      }
+
+      setLoading(false);
+    }
+
+    getProduct();
+  }, [id]);
+
+  if (loading) {
+    return (
+      <p style={{ padding: "100px" }}>
+        Loading product...
+      </p>
+    );
+  }
+
+  if (error || !product) {
+    return (
+      <p style={{ padding: "100px" }}>
+        Product not found.
+      </p>
+    );
+  }
+
+  return (
+    <main className="productPage">
+
+      <div className="productVisual">
+        <img
+          src={product.image_url}
+          alt={product.name}
+        />
+      </div>
+
+      <div className="productDetails">
+
+        <Link to="/shop" className="back">
+          <ArrowLeft size={15} />
+          Collection
+        </Link>
+
+        <small>{product.type}</small>
+
+        <h1>{product.name}</h1>
+
+        <div className="price">
+          {money(product.price)}
+        </div>
+
+        <p>{product.description}</p>
+
+        <div className="option">
+
+          <label>
+            Size
+            <a href="#">Size guide</a>
+          </label>
+
+          <div>
+            {["XS", "S", "M", "L", "XL"].map((s) => (
+              <button
+                key={s}
+                onClick={() => setSize(s)}
+                className={size === s ? "chosen" : ""}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+
+        </div>
+
+        <button
+          className="add"
+          onClick={() =>
+            setCart([
+              ...cart,
+              {
+                ...product,
+                size,
+                uid: Date.now()
+              }
+            ])
+          }
+        >
+          Add to bag
+          <ShoppingBag size={17} />
+        </button>
+
+        <div className="accord">
+          <p>Made to order · 6–8 weeks</p>
+          <p>Worldwide delivery available</p>
+          <p>Personal styling available by appointment</p>
+        </div>
+
+      </div>
+
+    </main>
+  );
 }
 function Cart({cart,setCart}){
  const total=cart.reduce((s,p)=>s+p.price,0);
