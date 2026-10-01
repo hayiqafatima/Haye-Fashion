@@ -36,6 +36,7 @@ function Layout({cart,setCart}){
   <Route path="/cart" element={<Cart cart={cart} setCart={setCart}/>}/>
   <Route path="/about" element={<About/>}/>
   <Route path="/admin/products" element={<AdminProducts />} />
+  <Route path="/login" element={<Login />} />
  </Routes><Footer/></>
 }
 
@@ -76,7 +77,109 @@ function Card({ p }) {
     </article>
   );
 }
+
+function Login() {
+  const navigate = useNavigate();
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState("");
+
+  async function handleLogin(e) {
+    e.preventDefault();
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email,
+      password: password,
+    });
+
+    if (error) {
+      console.error("Login error:", error);
+      setMessage(error.message);
+      return;
+    }
+
+    console.log("Login successful:", data);
+
+    setMessage("Login successful!");
+
+    // Take logged-in user to admin page
+    navigate("/admin/products");
+  }
+
+  return (
+    <main style={{ padding: "100px", maxWidth: "500px" }}>
+      <h1>Admin Login</h1>
+
+      <form onSubmit={handleLogin}>
+        <input
+          type="email"
+          placeholder="Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+
+        <input
+          type="password"
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+
+        <button type="submit">
+          Login
+        </button>
+      </form>
+
+      {message && <p>{message}</p>}
+    </main>
+  );
+}
+
+
 function AdminProducts() {
+
+  // ==========================================
+  // 1. AUTHENTICATION
+  // ==========================================
+
+  const navigate = useNavigate();
+
+  const [checkingAuth, setCheckingAuth] = useState(true);
+
+  useEffect(() => {
+    async function checkUser() {
+
+      // Ask Supabase if this browser has a logged-in session
+      const { data, error } = await supabase.auth.getSession();
+
+      if (error) {
+        console.error("Auth error:", error);
+        setCheckingAuth(false);
+        return;
+      }
+
+      // No session = user is not logged in
+      if (!data.session) {
+        navigate("/login");
+        return;
+      }
+
+      // Session exists = user is logged in
+      console.log("Logged in user:", data.session.user);
+
+      setCheckingAuth(false);
+    }
+
+    checkUser();
+
+  }, [navigate]);
+
+
+  // ==========================================
+  // 2. PRODUCT FORM STATE
+  // ==========================================
+
   const [form, setForm] = useState({
     name: "",
     type: "Bridal",
@@ -87,6 +190,13 @@ function AdminProducts() {
 
   const [message, setMessage] = useState("");
 
+  const [products, setProducts] = useState([]);
+
+
+  // ==========================================
+  // 3. HANDLE FORM INPUTS
+  // ==========================================
+
   function handleChange(e) {
     setForm({
       ...form,
@@ -94,46 +204,60 @@ function AdminProducts() {
     });
   }
 
-const [products, setProducts] = useState([]);
 
+  // ==========================================
+  // 4. READ PRODUCTS
+  // ==========================================
 
-async function getProducts() {
-  const { data, error } = await supabase
-    .from("products")
-    .select("*")
-    .order("created_at", { ascending: false });
+  async function getProducts() {
 
-  if (error) {
-    console.error("Error fetching products:", error);
-    return;
+    const { data, error } = await supabase
+      .from("products")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching products:", error);
+      return;
+    }
+
+    setProducts(data);
   }
 
-  setProducts(data);
-}
+
+  useEffect(() => {
+    getProducts();
+  }, []);
 
 
-useEffect(() => {
-  getProducts();
-}, []);
+  // ==========================================
+  // 5. DELETE PRODUCT
+  // ==========================================
 
+  async function deleteProduct(id) {
 
-async function deleteProduct(id) {
-  const { error } = await supabase
-    .from("products")
-    .delete()
-    .eq("id", id);
+    const { error } = await supabase
+      .from("products")
+      .delete()
+      .eq("id", id);
 
-  if (error) {
-    console.error("Delete error:", error);
-    return;
+    if (error) {
+      console.error("Delete error:", error);
+      return;
+    }
+
+    console.log("Product deleted:", id);
+
+    await getProducts();
   }
 
-  console.log("Product deleted:", id);
-}
 
-
+  // ==========================================
+  // 6. CREATE PRODUCT
+  // ==========================================
 
   async function handleSubmit(e) {
+
     e.preventDefault();
 
     const { data, error } = await supabase
@@ -159,6 +283,10 @@ async function deleteProduct(id) {
 
     setMessage("Product created successfully!");
 
+    // Refresh admin product list
+    await getProducts();
+
+    // Clear form
     setForm({
       name: "",
       type: "Bridal",
@@ -167,6 +295,24 @@ async function deleteProduct(id) {
       image_url: "",
     });
   }
+
+
+  // ==========================================
+  // 7. WAIT WHILE AUTH IS BEING CHECKED
+  // ==========================================
+
+  if (checkingAuth) {
+    return (
+      <p style={{ padding: "100px" }}>
+        Checking authentication...
+      </p>
+    );
+  }
+
+
+  // ==========================================
+  // 8. ADMIN PAGE
+  // ==========================================
 
   return (
     <main style={{ padding: "80px", maxWidth: "800px" }}>
@@ -222,9 +368,65 @@ async function deleteProduct(id) {
 
       {message && <p>{message}</p>}
 
+
+      {/* PRODUCTS */}
+
+      <div style={{ marginTop: "50px" }}>
+
+        <h2>Products</h2>
+
+        {products.map((product) => (
+
+          <div
+            key={product.id}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "20px",
+              padding: "15px 0",
+              borderBottom: "1px solid #ddd",
+            }}
+          >
+
+            <img
+              src={product.image_url}
+              alt={product.name}
+              style={{
+                width: "60px",
+                height: "80px",
+                objectFit: "cover",
+              }}
+            />
+
+            <div style={{ flex: 1 }}>
+
+              <strong>
+                {product.name}
+              </strong>
+
+              <p>
+                {money(product.price)}
+              </p>
+
+            </div>
+
+            <button
+              onClick={() => deleteProduct(product.id)}
+            >
+              Delete
+            </button>
+
+          </div>
+
+        ))}
+
+      </div>
+
     </main>
   );
 }
+
+
 function Shop() {
   const q = new URLSearchParams(location.search);
   const initial = q.get("type") || "All";
