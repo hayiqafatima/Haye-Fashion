@@ -107,6 +107,7 @@ function Login() {
     navigate("/admin/products");
   }
 
+  
   return (
     <main style={{ padding: "100px", maxWidth: "500px" }}>
       <h1>Admin Login</h1>
@@ -147,34 +148,40 @@ function AdminProducts() {
 
   const [checkingAuth, setCheckingAuth] = useState(true);
 
+
   useEffect(() => {
-    async function checkUser() {
+  async function checkUser() {
 
-      // Ask Supabase if this browser has a logged-in session
-      const { data, error } = await supabase.auth.getSession();
+    // STEP 1: Get the currently logged-in user
+    const { data: userData, error: userError } =
+      await supabase.auth.getUser();
 
-      if (error) {
-        console.error("Auth error:", error);
-        setCheckingAuth(false);
-        return;
-      }
-
-      // No session = user is not logged in
-      if (!data.session) {
-        navigate("/login");
-        return;
-      }
-
-      // Session exists = user is logged in
-      console.log("Logged in user:", data.session.user);
-
-      setCheckingAuth(false);
+    if (userError || !userData.user) {
+      navigate("/login", { replace: true });
+      return;
     }
 
-    checkUser();
+    // STEP 2: Find this user's role in the profiles table
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", userData.user.id)
+      .single();
 
-  }, [navigate]);
+    // STEP 3: Check whether the user is an admin
+    if (profileError || profile?.role !== "admin") {
+      console.error("Admin access denied:", profileError);
+      navigate("/", { replace: true });
+      return;
+    }
 
+    // STEP 4: Allow access
+    console.log("Admin verified:", userData.user.email);
+    setCheckingAuth(false);
+  }
+
+  checkUser();
+}, [navigate]);
 
   // ==========================================
   // 2. PRODUCT FORM STATE
@@ -192,7 +199,9 @@ function AdminProducts() {
 
   const [products, setProducts] = useState([]);
 
-
+ // Image upload states
+const [imageFile, setImageFile] = useState(null);
+const [uploading, setUploading] = useState(false);
   // ==========================================
   // 3. HANDLE FORM INPUTS
   // ==========================================
@@ -256,11 +265,23 @@ function AdminProducts() {
   // 6. CREATE PRODUCT
   // ==========================================
 
-  async function handleSubmit(e) {
+ async function handleSubmit(e) {
+  e.preventDefault();
 
-    e.preventDefault();
+  if (!imageFile) {
+    setMessage("Please select a product image.");
+    return;
+  }
 
-    const { data, error } = await supabase
+  setUploading(true);
+  setMessage("");
+
+  try {
+    // First upload the image
+    const imageUrl = await uploadImage(imageFile);
+
+    // Then save the product in the database
+    const { error } = await supabase
       .from("products")
       .insert([
         {
@@ -268,25 +289,18 @@ function AdminProducts() {
           type: form.type,
           price: Number(form.price),
           description: form.description,
-          image_url: form.image_url,
+          image_url: imageUrl,
         },
-      ])
-      .select();
+      ]);
 
     if (error) {
-      console.error(error);
-      setMessage("Something went wrong.");
-      return;
+      throw error;
     }
 
-    console.log("Created product:", data);
+    setMessage("Product and image uploaded successfully!");
 
-    setMessage("Product created successfully!");
-
-    // Refresh admin product list
     await getProducts();
 
-    // Clear form
     setForm({
       name: "",
       type: "Bridal",
@@ -294,7 +308,17 @@ function AdminProducts() {
       description: "",
       image_url: "",
     });
+
+    setImageFile(null);
+    e.target.reset();
+
+  } catch (error) {
+    console.error("Upload error:", error);
+    setMessage(error.message || "Something went wrong.");
+  } finally {
+    setUploading(false);
   }
+}
 
 
   // ==========================================
@@ -313,11 +337,48 @@ function AdminProducts() {
   // ==========================================
   // 8. ADMIN PAGE
   // ==========================================
+async function handleLogout() {
+  const { error } = await supabase.auth.signOut();
+
+  if (error) {
+    console.error("Logout error:", error);
+    return;
+  }
+
+  navigate("/login");
+}
+
+async function uploadImage(file) {
+  const fileExtension = file.name.split(".").pop().toLowerCase();
+  const fileName = `${crypto.randomUUID()}.${fileExtension}`;
+  const filePath = `products/${fileName}`;
+
+  const { error } = await supabase.storage
+    .from("product-images")
+    .upload(filePath, file, {
+      contentType: file.type,
+      upsert: false,
+    });
+
+  if (error) {
+    throw error;
+  }
+
+  const { data } = supabase.storage
+    .from("product-images")
+    .getPublicUrl(filePath);
+
+  return data.publicUrl;
+}
 
   return (
     <main style={{ padding: "80px", maxWidth: "800px" }}>
 
       <h1>Add Product</h1>
+
+      <button onClick={handleLogout}>
+        Logout
+      </button>
 
       <form onSubmit={handleSubmit}>
 
@@ -354,14 +415,14 @@ function AdminProducts() {
         />
 
         <input
-          name="image_url"
-          placeholder="Image URL"
-          value={form.image_url}
-          onChange={handleChange}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          onChange={(e) => setImageFile(e.target.files?.[0] || null)}
+          required
         />
 
-        <button type="submit">
-          Add Product
+        <button type="submit" disabled={uploading}>
+          {uploading ? "Uploading..." : "Add Product"}
         </button>
 
       </form>
